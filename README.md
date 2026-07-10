@@ -68,12 +68,3 @@ Swin_TSNE.jpg: Feature distribution t-SNE visualization
 
 
 
-3. Run Steps
-1.Download the CL-COVIDset dataset, place dataset files into dataset/train and dataset/test respectively.
-Each folder needs to contain 11 independent subfolders corresponding to the 11 disease categories.
-2.Install all dependencies using the command above.
-3.Train the mode：
-python train.py
-After training completes, the script will automatically run full test evaluation and generate all visualization results.
-4.Run test separately (only when best_model.pth weight file exists):
-python test.py
