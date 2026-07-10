@@ -19,6 +19,8 @@ def seed_everything(seed):
     torch.backends.cudnn.deterministic = True
 
 def main():
+    # 初始化输出文件夹
+    os.makedirs("./output", exist_ok=True)
     batch_size = 32
     lr = 1e-4
     seed = 42
@@ -67,7 +69,7 @@ def main():
         val_acc, avg_val_loss = evaluate(model, val_loader, criterion, device, is_test=False)
         print(f"Epoch {epoch+1:03d} | Train Loss:{avg_train_loss:.4f} Train Acc:{train_acc:.2f}% | Val Loss:{avg_val_loss:.4f} Val Acc:{val_acc:.2f}%")
 
-        # 关键：自动保存最优权重到本地 best_model.pth
+        # 自动保存最优权重到本地 best_model.pth
         if val_acc > best_acc:
             best_acc = val_acc
             best_state = model.state_dict()
