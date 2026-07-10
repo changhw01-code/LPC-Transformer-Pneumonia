@@ -16,7 +16,7 @@ Official implementation of LPC-Transformer for multi-class lung X-ray &amp; CT p
 
 
 2.Environment & Dependencies Installation
-Option 1: Install via requirements.txt (Recommended for academic reproduction)
+Option 1: Install via requirements.txt
 pip install -r requirements.txt
 
 Option 2: One-click pip installation command
