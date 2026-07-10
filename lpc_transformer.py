@@ -3,7 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint as checkpoint
 from timm.layers import DropPath, to_2tuple, trunc_normal_
-from pytorch_optimizer import SCION
+# 优化SCION导入容错
+try:
+    from pytorch_optimizer import SCION
+except ImportError:
+    print("警告：未安装pytorch-optimizer，执行 pip install pytorch-optimizer 后才能使用SCION优化器")
+    SCION = None
 
 # 自定义PolyReLU激活
 class PolyReLU(nn.Module):
@@ -61,7 +66,6 @@ class WindowAttention(nn.Module):
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = qk_scale or head_dim ** -0.5
-
         self.relative_position_bias_table = nn.Parameter(
             torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads))
         coords_h = torch.arange(self.window_size[0])
@@ -76,7 +80,6 @@ class WindowAttention(nn.Module):
         relative_position_index = relative_coords.sum(-1)
         self.register_buffer("relative_position_index", relative_position_index)
         trunc_normal_(self.relative_position_bias_table, std=0.02)
-
         self.qkv = nn.Linear(dim, dim*3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim)
@@ -88,11 +91,9 @@ class WindowAttention(nn.Module):
         q, k, v = qkv[0], qkv[1], qkv[2]
         q = q * self.scale
         attn = q @ k.transpose(-2, -1)
-
         relative_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
         relative_bias = relative_bias.view(self.window_size[0]*self.window_size[1], self.window_size[0]*self.window_size[1], -1).permute(2,0,1)
         attn += relative_bias.unsqueeze(0)
-
         if mask is not None:
             nW = mask.shape[0]
             attn = attn.view(B_//nW, nW, self.num_heads, N, N) + mask.unsqueeze(1).unsqueeze(0)
@@ -146,7 +147,6 @@ class SwinTransformerBlock(nn.Module):
         mlp_hidden = int(dim * mlp_ratio)
         self.mlp = Mlp(dim, mlp_hidden, act_layer=act_layer, drop=drop)
         self.fused_window_process = fused_window_process
-
         if self.shift_size > 0:
             H, W = self.input_resolution
             img_mask = torch.zeros((1, H, W, 1))
@@ -279,7 +279,7 @@ class SwinTransformer(nn.Module):
                 dim=int(embed_dim * 2 ** i_layer),
                 input_resolution=(patches_res[0]//(2**i_layer), patches_res[1]//(2**i_layer)),
                 depth=depths[i_layer], num_heads=num_heads[i_layer], window_size=window_size,
-                mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale, drop=drop_rate, attn_drop=attn_drop_rate,
+                mlp_ratio=mlp_ratio, qkv_bias=qk_scale, qk_scale=qk_scale, drop=drop_rate, attn_drop=attn_drop_rate,
                 drop_path=dpr[sum(depths[:i_layer]):sum(depths[:i_layer+1])],
                 downsample=PatchMerging if (i_layer < self.num_layers-1) else None,
                 use_checkpoint=use_checkpoint, fused_window_process=fused_window_process
@@ -309,14 +309,12 @@ class SwinTransformer(nn.Module):
         feat = self.forward_features(x)
         return self.head(feat)
 
-# LMF混合损失
+# LMF混合损失 修复：初始化将权重移至对应设备，避免cuda不匹配
 class LDAMLoss(nn.Module):
     def __init__(self, class_weights):
         super().__init__()
-        self.class_weights = torch.FloatTensor(class_weights)
+        self.register_buffer("class_weights", torch.FloatTensor(class_weights))
     def forward(self, inputs, targets):
-        if torch.cuda.is_available():
-            self.class_weights = self.class_weights.cuda()
         log_p = F.log_softmax(inputs, dim=1)
         nll = -log_p[range(inputs.size(0)), targets]
         return (self.class_weights[targets] * nll).mean()
