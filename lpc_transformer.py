@@ -20,7 +20,7 @@ class PolyReLU(nn.Module):
 # 窗口融合工具兼容
 try:
     from kernels.window_process.window_process import WindowProcess, WindowProcessReverse
-except:
+except Exception:
     WindowProcess = None
     WindowProcessReverse = None
 
