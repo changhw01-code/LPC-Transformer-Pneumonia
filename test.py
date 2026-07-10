@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import os
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -12,6 +13,9 @@ from sklearn.manifold import TSNE
 
 from lpc_transformer import SwinTransformer
 from dataloader import get_dataloaders
+
+# 自动创建输出文件夹，防止保存图片报错
+os.makedirs("./output", exist_ok=True)
 
 target_names = [
     "CT Normal",
@@ -66,9 +70,9 @@ def evaluate(model, loader, criterion, device, is_test=False):
     auc = roc_auc_score(y_bin, all_probs, average="weighted", multi_class="ovo")
     print(f"\nTest Metrics:\nAcc:{acc:.4f} Recall:{rec:.4f} Precision:{prec:.4f} F1:{f1:.4f} AUC:{auc:.4f}")
 
-    # 导出分类报告CSV
+    # 导出分类报告CSV，存入output
     report = classification_report(all_labels, preds, target_names=target_names, output_dict=True, zero_division=0)
-    pd.DataFrame(report).transpose().to_csv("Swin_Report.csv")
+    pd.DataFrame(report).transpose().to_csv("./output/Swin_Report.csv")
 
     # 混淆矩阵
     cm = confusion_matrix(all_labels, preds)
@@ -77,7 +81,7 @@ def evaluate(model, loader, criterion, device, is_test=False):
     plt.xticks(rotation=90)
     plt.yticks(rotation=0)
     plt.tight_layout()
-    plt.savefig("Swin_ConfusionMatrix.jpg", dpi=300, bbox_inches="tight")
+    plt.savefig("./output/Swin_ConfusionMatrix.jpg", dpi=300, bbox_inches="tight")
     plt.close()
 
     # 提取特征
@@ -98,7 +102,7 @@ def evaluate(model, loader, criterion, device, is_test=False):
     sc = plt.scatter(pca_2d[:,0], pca_2d[:,1], c=feat_labels, cmap="tab10", alpha=0.7)
     plt.legend(*sc.legend_elements(), labels=target_names, loc="upper right", fontsize=10)
     plt.tight_layout()
-    plt.savefig("Swin_PCA.jpg", dpi=300, bbox_inches="tight")
+    plt.savefig("./output/Swin_PCA.jpg", dpi=300, bbox_inches="tight")
     plt.close()
 
     # TSNE
@@ -110,9 +114,9 @@ def evaluate(model, loader, criterion, device, is_test=False):
     sc = plt.scatter(tsne_2d[:,0], tsne_2d[:,1], c=tsne_labs, cmap="tab10", alpha=0.7)
     plt.legend(*sc.legend_elements(), labels=target_names, loc="upper right", fontsize=10)
     plt.tight_layout()
-    plt.savefig("Swin_TSNE.jpg", dpi=300, bbox_inches="tight")
+    plt.savefig("./output/Swin_TSNE.jpg", dpi=300, bbox_inches="tight")
     plt.close()
-    print("✅ 测试完成：分类报告、混淆矩阵、PCA、t-SNE文件已生成")
+    print("✅ 测试完成：分类报告、混淆矩阵、PCA、t-SNE文件已生成至 ./output 文件夹")
 
 # 单独运行测试入口
 if __name__ == "__main__":
@@ -123,5 +127,9 @@ if __name__ == "__main__":
         embed_dim=96, depths=[2,2,6,2], num_heads=[3,6,12,24],
         window_size=7, mlp_ratio=4., drop_path_rate=0.1
     ).to(device)
-    model.load_state_dict(torch.load("best_model.pth"))
+    # 修复：设备兼容 + 捕获权重缺失异常
+    weight_path = "best_model.pth"
+    if not os.path.exists(weight_path):
+        raise FileNotFoundError(f"权重文件 {weight_path} 不存在，请先运行train.py训练生成权重！")
+    model.load_state_dict(torch.load(weight_path, map_location=device))
     evaluate(model, test_loader, None, device, is_test=True)
