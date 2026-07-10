@@ -6,7 +6,6 @@ import torchvision
 from torch.utils.data import DataLoader, random_split
 from torchvision import transforms
 import os
-
 # 自定义噪声/模糊增强
 class AddSaltPepperNoise(object):
     def __init__(self, density=0, p=0.5):
@@ -80,19 +79,20 @@ def get_dataloaders(batch_size=32, train_root="./dataset/train", test_root="./da
     本地运行请修改 train_root / test_root 为你的CL-COVIDset数据集路径
     数据集下载地址：Kaggle chiong-continual-learning-of-covid19
     """
+    # 自动创建dataset文件夹并提示
+    os.makedirs("./dataset/train", exist_ok=True)
+    os.makedirs("./dataset/test", exist_ok=True)
     # 自动校验数据集文件夹是否存在
-    if not os.path.exists(train_root):
-        raise FileNotFoundError(f"训练集路径不存在：{train_root}\n请下载CL-COVIDset数据集放入dataset文件夹")
-    if not os.path.exists(test_root):
-        raise FileNotFoundError(f"测试集路径不存在：{test_root}\n请下载CL-COVIDset数据集放入dataset文件夹")
+    if not os.path.exists(train_root) or len(os.listdir(train_root)) == 0:
+        raise FileNotFoundError(f"训练集路径为空：{train_root}\n请下载CL-COVIDset数据集放入dataset/train，内部为11个分类子文件夹")
+    if not os.path.exists(test_root) or len(os.listdir(test_root)) == 0:
+        raise FileNotFoundError(f"测试集路径为空：{test_root}\n请下载CL-COVIDset数据集放入dataset/test，内部为11个分类子文件夹")
         
     full_train_ds = torchvision.datasets.ImageFolder(train_root, transform=train_transforms)
     test_ds = torchvision.datasets.ImageFolder(test_root, transform=val_test_transforms)
-
     val_size = int(0.2 * len(full_train_ds))
     train_size = len(full_train_ds) - val_size
     train_ds, val_ds = random_split(full_train_ds, [train_size, val_size])
-
     # 修复Windows多进程报错：自动判断系统设置num_workers
     workers = 0 if os.name == "nt" else 4
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=workers)
