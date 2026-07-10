@@ -10,10 +10,8 @@ from sklearn.metrics import confusion_matrix, classification_report, roc_auc_sco
 from sklearn.preprocessing import label_binarize
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
-
 from lpc_transformer import SwinTransformer
 from dataloader import get_dataloaders
-
 # 自动创建输出文件夹，防止保存图片报错
 os.makedirs("./output", exist_ok=True)
 
@@ -49,7 +47,6 @@ def evaluate(model, loader, criterion, device, is_test=False):
         avg_loss = total_loss / len(loader)
         acc = 100.0 * correct / total
         return acc, avg_loss
-
     # 完整测试集指标与可视化
     all_probs = []
     all_labels = []
@@ -61,7 +58,6 @@ def evaluate(model, loader, criterion, device, is_test=False):
             all_probs.extend(probs.cpu().numpy())
             all_labels.extend(label.numpy())
     preds = np.argmax(all_probs, axis=1)
-
     acc = accuracy_score(all_labels, preds)
     rec = recall_score(all_labels, preds, average="macro", zero_division=0)
     prec = precision_score(all_labels, preds, average="macro", zero_division=0)
@@ -69,11 +65,9 @@ def evaluate(model, loader, criterion, device, is_test=False):
     y_bin = label_binarize(all_labels, classes=list(range(len(target_names))))
     auc = roc_auc_score(y_bin, all_probs, average="weighted", multi_class="ovo")
     print(f"\nTest Metrics:\nAcc:{acc:.4f} Recall:{rec:.4f} Precision:{prec:.4f} F1:{f1:.4f} AUC:{auc:.4f}")
-
     # 导出分类报告CSV，存入output
     report = classification_report(all_labels, preds, target_names=target_names, output_dict=True, zero_division=0)
     pd.DataFrame(report).transpose().to_csv("./output/Swin_Report.csv")
-
     # 混淆矩阵
     cm = confusion_matrix(all_labels, preds)
     plt.figure(figsize=(14,12))
@@ -83,7 +77,6 @@ def evaluate(model, loader, criterion, device, is_test=False):
     plt.tight_layout()
     plt.savefig("./output/Swin_ConfusionMatrix.jpg", dpi=300, bbox_inches="tight")
     plt.close()
-
     # 提取特征
     def get_feats(model, loader):
         feats, labels = [], []
@@ -95,7 +88,6 @@ def evaluate(model, loader, criterion, device, is_test=False):
                 labels.append(lab)
         return torch.cat(feats).numpy(), torch.cat(labels).numpy()
     feats, feat_labels = get_feats(model, loader)
-
     # PCA
     pca_2d = PCA(n_components=2).fit_transform(feats)
     plt.figure(figsize=(12,10))
@@ -104,12 +96,13 @@ def evaluate(model, loader, criterion, device, is_test=False):
     plt.tight_layout()
     plt.savefig("./output/Swin_PCA.jpg", dpi=300, bbox_inches="tight")
     plt.close()
-
-    # TSNE
+    # TSNE 修复：样本数不足自动降低perplexity消除警告
     sub_size = min(2000, len(feats))
-    tsne = TSNE(n_components=2, perplexity=30, learning_rate=600, max_iter=1000, random_state=42)
-    tsne_2d = tsne.fit_transform(feats[:sub_size])
+    tsne_input = feats[:sub_size]
     tsne_labs = feat_labels[:sub_size]
+    perplexity = min(30, sub_size - 1)
+    tsne = TSNE(n_components=2, perplexity=perplexity, learning_rate=600, max_iter=1000, random_state=42)
+    tsne_2d = tsne.fit_transform(tsne_input)
     plt.figure(figsize=(12,10))
     sc = plt.scatter(tsne_2d[:,0], tsne_2d[:,1], c=tsne_labs, cmap="tab10", alpha=0.7)
     plt.legend(*sc.legend_elements(), labels=target_names, loc="upper right", fontsize=10)
@@ -131,5 +124,6 @@ if __name__ == "__main__":
     weight_path = "best_model.pth"
     if not os.path.exists(weight_path):
         raise FileNotFoundError(f"权重文件 {weight_path} 不存在，请先运行train.py训练生成权重！")
-    model.load_state_dict(torch.load(weight_path, map_location=device))
+    # 强化map_location，多设备兼容
+    model.load_state_dict(torch.load(weight_path, map_location=torch.device(device)))
     evaluate(model, test_loader, None, device, is_test=True)
